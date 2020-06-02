@@ -21,6 +21,7 @@ library regex;
 import 'dart:collection';
 
 import 'package:characters/characters.dart';
+import 'package:quiver/core.dart';
 
 enum RegularExpressionValueKind {
   // Empty string. Only occurs in NFAs.
@@ -74,6 +75,17 @@ class RegularExpressionValue {
   String toString() {
     return 'RegularExpressionValue{_kind: $_kind, _literal: $_literal}';
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RegularExpressionValue &&
+          runtimeType == other.runtimeType &&
+          _kind == other._kind &&
+          _literal == other._literal;
+
+  @override
+  int get hashCode => _kind.hashCode ^ _literal.hashCode;
 }
 
 enum RegularExpressionKind { VALUE, CLOSURE, CONCATENATION, ALTERNATION }
@@ -103,20 +115,20 @@ class RegularExpression {
   final RegularExpression _left;
   final RegularExpression _right;
   final RegularExpressionValue _value;
+  RegularExpression _parent;
 
-  const RegularExpression(this._kind, this._left, this._right, this._value);
+  RegularExpression(this._kind, this._left, this._right, this._value);
 
   RegularExpression._ValueLiteral(final String value)
       : this(RegularExpressionKind.VALUE, null, null, RegularExpressionValue.literal(value));
 
-  const RegularExpression._Closure(final RegularExpression value)
+  RegularExpression._Closure(final RegularExpression value)
       : this(RegularExpressionKind.CLOSURE, value, null, null);
 
-  const RegularExpression._Concatenation(
-      final RegularExpression left, final RegularExpression right)
+  RegularExpression._Concatenation(final RegularExpression left, final RegularExpression right)
       : this(RegularExpressionKind.CONCATENATION, left, right, null);
 
-  const RegularExpression._Alternation(final RegularExpression left, final RegularExpression right)
+  RegularExpression._Alternation(final RegularExpression left, final RegularExpression right)
       : this(RegularExpressionKind.ALTERNATION, left, right, null);
 
   // Create a tree of RegularExpression objects from an input String.
@@ -155,18 +167,23 @@ class RegularExpression {
               case '*':
                 var value = output.removeFirst();
                 var newOutput = RegularExpression._Closure(value);
+                value.parent = newOutput;
                 output.addFirst(newOutput);
                 break;
               case '|':
                 var right = output.removeFirst();
                 var left = output.removeFirst();
                 var newOutput = RegularExpression._Alternation(left, right);
+                left.parent = newOutput;
+                right.parent = newOutput;
                 output.addFirst(newOutput);
                 break;
               case '+':
                 var right = output.removeFirst();
                 var left = output.removeFirst();
                 var newOutput = RegularExpression._Concatenation(left, right);
+                left.parent = newOutput;
+                right.parent = newOutput;
                 output.addFirst(newOutput);
                 break;
               case '(':
@@ -212,12 +229,15 @@ class RegularExpression {
         case '*':
           var value = output.removeFirst();
           var newOutput = RegularExpression._Closure(value);
+          value.parent = newOutput;
           output.addFirst(newOutput);
           break;
         case '+':
           var right = output.removeFirst();
           var left = output.removeFirst();
           var newOutput = RegularExpression._Concatenation(left, right);
+          left.parent = newOutput;
+          right.parent = newOutput;
           output.addFirst(newOutput);
           break;
         default:
@@ -233,6 +253,12 @@ class RegularExpression {
   }
 
   RegularExpressionKind get kind => _kind;
+
+  RegularExpression get parent => _parent;
+
+  set parent(final RegularExpression value) {
+    _parent = value;
+  }
 
   RegularExpression get left => _left;
 
@@ -253,5 +279,66 @@ class RegularExpression {
         return '{ALTERNATION ($left, $right)}';
     }
     return '{ERROR UNKNOWN KIND}';
+  }
+}
+
+// RegularExpressionPostOrderIterator lets you iterate over a RegularExpression tree
+// in the correct order (post-order) to apply Thompson's construction to create
+// NFA's in the correct order.
+class RegularExpressionPostOrderIterator implements Iterator<RegularExpression> {
+  final RegularExpression _root;
+  RegularExpression _lastNodeVisited;
+  bool isStarted = false;
+
+  RegularExpressionPostOrderIterator(this._root);
+
+  @override
+  RegularExpression get current => _lastNodeVisited;
+
+  @override
+  bool moveNext() {
+    if (!isStarted) {
+      isStarted = true;
+      _lastNodeVisited = _findLeftMostLeaf(_root);
+      return true;
+    }
+
+    if (_lastNodeVisited == _root || _lastNodeVisited == null) {
+      _lastNodeVisited = null;
+      return false;
+    }
+
+    if (_isRightChild(_lastNodeVisited)) {
+      _lastNodeVisited = _lastNodeVisited.parent;
+      return true;
+    }
+
+    if (_hasRightSibling(_lastNodeVisited)) {
+      _lastNodeVisited = _findLeftMostLeaf(_getRightSibling(_lastNodeVisited));
+      return true;
+    }
+
+    _lastNodeVisited = _lastNodeVisited.parent;
+    return true;
+  }
+
+  bool _isRightChild(final RegularExpression node) {
+    return node.parent.right == node;
+  }
+
+  bool _hasRightSibling(final RegularExpression node) {
+    return _getRightSibling(node) != null;
+  }
+
+  RegularExpression _getRightSibling(final RegularExpression node) {
+    return node.parent.right;
+  }
+
+  RegularExpression _findLeftMostLeaf(final RegularExpression root) {
+    var current = root;
+    while (current.left != null) {
+      current = current.left;
+    }
+    return current;
   }
 }

@@ -73,7 +73,7 @@ void main() {
     expect(nfa.matches(''), isFalse);
   });
 
-  test('two character RE to NFA matches same two characters', () {
+  test('two character RE to NFA matches same two characters, characters are same', () {
     // === given ===
     var input = 'aa';
     var re = RegularExpression.fromString(input);

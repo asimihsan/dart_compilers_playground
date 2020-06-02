@@ -45,31 +45,58 @@ import 'package:dart_compilers_playground/regex.dart';
 // [1] Engineering a Compiler 2nd Edition section 2.4 (From Regular Expression to Scanner),
 //     particularly pages 46-47.
 class NFA {
-  int _stateNumber = 0;
-  NFAState _startState;
-  NFAState _acceptingState;
+  final NFAState _startState;
+  final NFAState _endState;
+
+  NFA(this._startState, this._endState);
 
   // fromRegularExpression uses Thompson's Construction to convert a RegularExpression tree
   // to a NFA. Again, reference is specifically [1] p46.
-  NFA.fromRegularExpression(final RegularExpression root) {
-    switch (root.kind) {
-      case RegularExpressionKind.VALUE:
-        var acceptingState = NFAState(_stateNumber++, [], true);
-        var edge = NFAEdge(acceptingState, root.value);
-        var startState = NFAState(_stateNumber++, [edge], false);
-        _startState ??= startState;
-        _acceptingState ??= acceptingState;
-        break;
-      case RegularExpressionKind.CLOSURE:
-        throw UnsupportedError('not supported yet');
-        break;
-      case RegularExpressionKind.CONCATENATION:
-        throw UnsupportedError('not supported yet');
-        break;
-      case RegularExpressionKind.ALTERNATION:
-        throw UnsupportedError('not supported yet');
-        break;
+  factory NFA.fromRegularExpression(final RegularExpression root) {
+    var stateNumber = 0;
+    final Queue<NFA> nfaStack = ListQueue<NFA>();
+    final regexIterator = RegularExpressionPostOrderIterator(root);
+    while (regexIterator.moveNext()) {
+      final currentRegex = regexIterator.current;
+      switch (currentRegex.kind) {
+        case RegularExpressionKind.VALUE:
+          final endState = NFAState(stateNumber++, [], false);
+          final edge = NFAEdge(endState, currentRegex.value);
+          final startState = NFAState(stateNumber++, [edge], false);
+          final currentNFA = NFA(startState, endState);
+          nfaStack.addLast(currentNFA);
+          break;
+        case RegularExpressionKind.CLOSURE:
+          throw UnsupportedError('not supported yet');
+          break;
+        case RegularExpressionKind.CONCATENATION:
+          // NFA a is (s_1) -> a -> ((s_2))
+          // NFA b is (s_3) -> b -> ((s_4))
+          //
+          // Thompson's construction concatenates them with an epsilon edge
+          //
+          // (s_1) -> a -> (s_2) -> epsilon -> (s_3) -> ((s_4))
+          final nfaSecond = nfaStack.removeLast();
+          final nfaFirst = nfaStack.removeFirst();
+          final epsilonEdge = NFAEdge.epsilon(nfaSecond._startState);
+          nfaFirst._endState.outboundEdges = [epsilonEdge];
+          final endState = nfaSecond._endState;
+          final startState = nfaFirst._startState;
+          final newNfa = NFA(startState, endState);
+          nfaStack.addLast(newNfa);
+          break;
+        case RegularExpressionKind.ALTERNATION:
+          throw UnsupportedError('not supported yet');
+          break;
+      }
     }
+
+    if (nfaStack.length != 1) {
+      throw StateError('NFA stack should only have one NFA left');
+    }
+    final nfa = nfaStack.removeLast();
+    nfa._endState.isAccepting = true;
+    return nfa;
   }
 
   // matches attempts to match all of an input string to the NFA.
@@ -87,8 +114,8 @@ class NFA {
   bool matches(final String input) {
     // Without ignoring this error Dart cannot infer the type of items popped from the queue.
     // ignore: omit_local_variable_types
-    final ListQueue<NFAConfiguration> configurations =
-        ListQueue.from([NFAConfiguration(_startState, 0)]);
+    final Queue<NFAConfiguration> configurations = ListQueue();
+    configurations.addFirst(NFAConfiguration(_startState, 0));
 
     final lastIndex = input.length;
     while (configurations.isNotEmpty) {
@@ -144,16 +171,24 @@ class NFAConfiguration {
 
 class NFAState {
   final int _identifier;
-  final List<NFAEdge> _outboundEdges;
-  final bool _isAccepting;
+  List<NFAEdge> _outboundEdges;
+  bool _isAccepting;
 
-  const NFAState(this._identifier, this._outboundEdges, this._isAccepting);
+  NFAState(this._identifier, this._outboundEdges, this._isAccepting);
 
   List<NFAEdge> get outboundEdges => _outboundEdges;
 
   int get identifier => _identifier;
 
   bool get isAccepting => _isAccepting;
+
+  set isAccepting(bool value) {
+    _isAccepting = value;
+  }
+
+  set outboundEdges(List<NFAEdge> value) {
+    _outboundEdges = value;
+  }
 }
 
 class NFAEdge {

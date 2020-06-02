@@ -97,4 +97,88 @@ void main() {
     expect(re.right.left.right.value.kind, RegularExpressionValueKind.LITERAL);
     expect(re.right.left.right.value.literal, 'c');
   });
+
+  test('can iterate regular expression in post-order', () {
+    // === given ===
+    var input = 'a(b|c)*';
+    var re = RegularExpression.fromString(input);
+
+    // === when/then ===
+    var iterator = RegularExpressionPostOrderIterator(re);
+    expect(iterator.current, isNull);
+
+    var move1 = iterator.moveNext();
+    expect(move1, isTrue);
+    var current1 = iterator.current;
+    expect(current1.kind, RegularExpressionKind.VALUE);
+    expect(current1.value.literal, 'a');
+
+    var move2 = iterator.moveNext();
+    expect(move2, isTrue);
+    var current2 = iterator.current;
+    expect(current2.kind, RegularExpressionKind.VALUE);
+    expect(current2.value.literal, 'b');
+
+    var move3 = iterator.moveNext();
+    expect(move3, isTrue);
+    var current3 = iterator.current;
+    expect(current3.kind, RegularExpressionKind.VALUE);
+    expect(current3.value.literal, 'c');
+
+    var move4 = iterator.moveNext();
+    expect(move4, isTrue);
+    var current4 = iterator.current;
+    expect(current4.kind, RegularExpressionKind.ALTERNATION);
+
+    var move5 = iterator.moveNext();
+    expect(move5, isTrue);
+    var current5 = iterator.current;
+    expect(current5.kind, RegularExpressionKind.CLOSURE);
+
+    var move6 = iterator.moveNext();
+    expect(move6, isTrue);
+    var current6 = iterator.current;
+    expect(current6.kind, RegularExpressionKind.CONCATENATION);
+
+    var move7 = iterator.moveNext();
+    expect(move7, isFalse);
+    expect(iterator.current, isNull);
+
+    // Redundant by checking we conform to the Iterator interface.
+    var move8 = iterator.moveNext();
+    expect(move8, isFalse);
+    expect(iterator.current, isNull);
+  });
+
+  test('check post order iteration of aa', () {
+    // === given ===
+    var input = 'aa';
+    var re = RegularExpression.fromString(input);
+
+    // === when/then ===
+    var iterator = RegularExpressionPostOrderIterator(re);
+    expect(iterator.current, isNull);
+
+    var move1 = iterator.moveNext();
+    expect(move1, isTrue);
+    var current1 = iterator.current;
+    expect(current1.kind, RegularExpressionKind.VALUE);
+    expect(current1.value.literal, 'a');
+
+    var move2 = iterator.moveNext();
+    expect(move2, isTrue);
+    var current2 = iterator.current;
+    expect(current2.kind, RegularExpressionKind.VALUE);
+    expect(current2.value.literal, 'a');
+
+    var move3 = iterator.moveNext();
+    expect(move3, isTrue);
+    var current3 = iterator.current;
+    expect(current3.kind, RegularExpressionKind.CONCATENATION);
+
+    var move4 = iterator.moveNext();
+    expect(move4, isFalse);
+    var current4 = iterator.current;
+    expect(current4, isNull);
+  });
 }

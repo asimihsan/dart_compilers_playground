@@ -181,4 +181,41 @@ void main() {
     var current4 = iterator.current;
     expect(current4, isNull);
   });
+
+  // needs to be a tree of (ab) | (c), but there was a bug where it was (a) + (bc)
+  test('check precedence order of | and +', () {
+    // === given ===
+    var input = 'ab|c';
+
+    // === when ===
+    var re = RegularExpression.fromString(input);
+
+    // === then ===
+    expect(re, isNotNull);
+    expect(re.kind, RegularExpressionKind.ALTERNATION);
+    expect(re.left, isNotNull);
+    expect(re.left.kind, RegularExpressionKind.CONCATENATION);
+    expect(re.left.left.kind, RegularExpressionKind.VALUE);
+    expect(re.left.left.value.kind, RegularExpressionValueKind.LITERAL);
+    expect(re.left.left.value.literal, 'a');
+    expect(re.left.right.kind, RegularExpressionKind.VALUE);
+    expect(re.left.right.value.kind, RegularExpressionValueKind.LITERAL);
+    expect(re.left.right.value.literal, 'b');
+
+    expect(re.right, isNotNull);
+    expect(re.right.kind, RegularExpressionKind.VALUE);
+    expect(re.right.value.kind, RegularExpressionValueKind.LITERAL);
+    expect(re.right.value.literal, 'c');
+  });
+
+  test('check closure and concatenation 01', () {
+    // === given ===
+    var input = 'aa*a';
+
+    // === when ===
+    var re = RegularExpression.fromString(input);
+
+    // === then ===
+    expect(re, isNotNull);
+  });
 }

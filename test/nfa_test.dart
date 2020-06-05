@@ -21,68 +21,148 @@ import 'package:dart_compilers_playground/nfa.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('single character RE to NFA matches same single character', () {
-    // === given ===
-    var input = 'a';
-    var re = RegularExpression.fromString(input);
-
-    // === when ===
-    var nfa = NFA.fromRegularExpression(re);
-
-    // === then ===
-    expect(nfa, isNotNull);
-    expect(nfa.matches(input), isTrue);
+  test('test battery - regex is empty string', () {
+    // input, regex, matcher
+    var testCases = [
+      ['a', '', false],
+    ];
+    executeTestCases(testCases);
   });
 
-  test('single character RE to NFA does not match different single character', () {
-    // === given ===
-    var input = 'a';
-    var re = RegularExpression.fromString(input);
-
-    // === when ===
-    var nfa = NFA.fromRegularExpression(re);
-
-    // === then ===
-    expect(nfa, isNotNull);
-    expect(nfa.matches('b'), isFalse);
+  test('test battery - just value', () {
+    // input, regex, matcher
+    var testCases = [
+      ['a', 'a', true],
+      ['a', 'b', false],
+      ['', 'a', false],
+    ];
+    executeTestCases(testCases);
   });
 
-  test('single character RE to NFA does not match different characters', () {
-    // === given ===
-    var input = 'a';
-    var re = RegularExpression.fromString(input);
-
-    // === when ===
-    var nfa = NFA.fromRegularExpression(re);
-
-    // === then ===
-    expect(nfa, isNotNull);
-    expect(nfa.matches('aa'), isFalse);
+  test('test battery - value and parentheses', () {
+    // input, regex, matcher
+    var testCases = [
+      ['a', '(a)', true],
+      ['a', '(b)', false],
+      ['a', '((a))', true],
+    ];
+    executeTestCases(testCases);
   });
 
-  test('single character RE to NFA does not match empty string', () {
-    // === given ===
-    var input = 'a';
-    var re = RegularExpression.fromString(input);
-
-    // === when ===
-    var nfa = NFA.fromRegularExpression(re);
-
-    // === then ===
-    expect(nfa, isNotNull);
-    expect(nfa.matches(''), isFalse);
+  test('test battery - value and concatenation', () {
+    // input, regex, matcher
+    var testCases = [
+      ['aa', 'aa', true],
+      ['ab', 'aa', false],
+      ['aaaaaaa', 'aaaaaaa', true],
+    ];
+    executeTestCases(testCases);
   });
 
-  test('two character RE to NFA matches same two characters, characters are same', () {
-    // === given ===
-    var input = 'aa';
-    var re = RegularExpression.fromString(input);
-
-    // === when ===
-    var nfa = NFA.fromRegularExpression(re);
-
-    // === then ===
-    expect(nfa, isNotNull);
-    expect(nfa.matches(input), isTrue);
+  test('test battery - value, concatenation, and parentheses', () {
+    // input, regex, matcher
+    var testCases = [
+      ['aa', '(a)a', true],
+      ['aa', 'a(a)', true],
+      ['aa', '(aa)', true],
+      ['ab', '(a)a', false],
+    ];
+    executeTestCases(testCases);
   });
+
+  test('test battery - value and alternation', () {
+    // input, regex, matcher
+    var testCases = [
+      ['a', 'a|b', true],
+      ['c', 'a|b', false],
+      ['e', 'a|b|c|d|e', true],
+    ];
+    executeTestCases(testCases);
+  });
+
+  test('test battery - value and closure', () {
+    // input, regex, matcher
+    var testCases = [
+      ['a', 'a*', true],
+      ['b', 'a*', false],
+    ];
+    executeTestCases(testCases);
+  });
+
+  test('test battery - value, concatenation, and closure', () {
+    // input, regex, matcher
+    var testCases = [
+      ['a', 'aa*', true],
+      ['b', 'ba*', true],
+      ['b', 'ab*', false],
+      ['b', 'bb*', true],
+      ['a', 'aaa*', false],
+      ['a', 'aa*a', false],
+      ['a', 'a*aa', false],
+    ];
+    executeTestCases(testCases);
+  });
+
+  test('test battery - value, concatenation, closure, and parentheses', () {
+    // input, regex, matcher
+    var testCases = [
+      ['a', '(a)a*', true],
+      ['a', 'a(a)*', true],
+      ['a', '(aa)*', false],
+      ['a', 'a(aa)*', true],
+      ['a', '(aa)*a', true],
+      ['ab', '(ab)*(ab)*', true],
+      ['ab', '(aa)*(ab)*(a)*a*', true],
+    ];
+    executeTestCases(testCases);
+  });
+
+  test('test battery - value and concatenation and alternation', () {
+    // input, regex, matcher
+    var testCases = [
+      ['ab', 'ab|c', true],
+      ['abc', 'ab|c', false],
+      ['c', 'ab|c', true],
+      ['b', 'ab|c', false],
+    ];
+    executeTestCases(testCases);
+  });
+
+  test('test battery - value, concatenation, closure, alternation, and parentheses', () {
+    // input, regex, matcher
+    var testCases = [
+      ['a', '(a|b)*', true],
+      ['b', '(a|b)*', true],
+      ['a', '(a|b)*a', true],
+      ['a', 'a(a|b)*', true],
+      ['ab', '(a|b)*', true],
+      ['ab', '(ab|bc)*', true],
+      ['bc', '(ab|bc)*', true],
+      ['bb', '(ab|bc)*', false],
+    ];
+    executeTestCases(testCases);
+  });
+}
+
+void executeTestCases(final List<List<Object>> testCases) {
+  for (var testCase in testCases) {
+    var input = testCase[0] as String;
+    var regex = testCase[1] as String;
+    var expectedResult = testCase[2] as bool;
+    print('input $input, regex $regex, expectedResult $expectedResult');
+    executeTest(input, regex, expectedResult);
+  }
+}
+
+void executeTest(final String input, final String regex, final bool expectedResult) {
+  // === given ===
+  var re = RegularExpression.fromString(regex);
+
+  // === when ===
+  var nfa = NFA.fromRegularExpression(re);
+
+  // === then ===
+  expect(nfa, isNotNull, reason: 'expected regex $regex to compile to non-null NFA');
+  expect(nfa.matches(input), expectedResult,
+      reason: 'expected regex $regex input $input to give result $expectedResult');
 }

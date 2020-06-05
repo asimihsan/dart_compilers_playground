@@ -67,8 +67,25 @@ class NFA {
           nfaStack.addLast(currentNFA);
           break;
         case RegularExpressionKind.CLOSURE:
-          throw UnsupportedError('not supported yet');
+          // Closure can:
+          // 1) skip the NFA with an epsilon edge, OR
+          // 2) go back from the end state to the start state with an epsilon edge.
+
+          // this is 1), we just skip the existing NFA entirely with an epsilon edge
+          final endState = NFAState(stateNumber++, [], false);
+          final edgeSkip = NFAEdge.epsilon(endState);
+          final startState = NFAState(stateNumber++, [edgeSkip], false);
+
+          // this is 2)
+          final nfa = nfaStack.removeLast();
+          startState.addOutputEdge(NFAEdge.epsilon(nfa._startState));
+          nfa._endState.addOutputEdge(NFAEdge.epsilon(nfa._startState));
+          nfa._endState.addOutputEdge(NFAEdge.epsilon(endState));
+
+          final newNfa = NFA(startState, endState);
+          nfaStack.addLast(newNfa);
           break;
+
         case RegularExpressionKind.CONCATENATION:
           // NFA a is (s_1) -> a -> ((s_2))
           // NFA b is (s_3) -> b -> ((s_4))
@@ -77,7 +94,7 @@ class NFA {
           //
           // (s_1) -> a -> (s_2) -> epsilon -> (s_3) -> ((s_4))
           final nfaSecond = nfaStack.removeLast();
-          final nfaFirst = nfaStack.removeFirst();
+          final nfaFirst = nfaStack.removeLast();
           final epsilonEdge = NFAEdge.epsilon(nfaSecond._startState);
           nfaFirst._endState.outboundEdges = [epsilonEdge];
           final endState = nfaSecond._endState;
@@ -85,8 +102,28 @@ class NFA {
           final newNfa = NFA(startState, endState);
           nfaStack.addLast(newNfa);
           break;
+
         case RegularExpressionKind.ALTERNATION:
-          throw UnsupportedError('not supported yet');
+          // Join two NFAs with
+          // 1) a single state and 2 epsilon edges to both starts, and
+          // 2) a single state and 2 epsilon edges as new end from two ends
+          final nfaSecond = nfaStack.removeLast();
+          final nfaFirst = nfaStack.removeLast();
+          final epsilonEdgeToFirst = NFAEdge.epsilon(nfaFirst._startState);
+          final epsilonEdgeToSecond = NFAEdge.epsilon(nfaSecond._startState);
+          final newStartState =
+              NFAState(stateNumber++, [epsilonEdgeToFirst, epsilonEdgeToSecond], false);
+
+          final newEndState = NFAState(stateNumber++, [], true);
+          final epsilonEdgeFromFirst = NFAEdge.epsilon(newEndState);
+          final epsilonEdgeFromSecond = NFAEdge.epsilon(newEndState);
+          nfaFirst._endState.outboundEdges = [epsilonEdgeFromFirst];
+          nfaFirst._endState.isAccepting = false;
+          nfaSecond._endState.outboundEdges = [epsilonEdgeFromSecond];
+          nfaSecond._endState.isAccepting = false;
+
+          final newNfa = NFA(newStartState, newEndState);
+          nfaStack.addLast(newNfa);
           break;
       }
     }
@@ -127,10 +164,9 @@ class NFA {
           // configuration of the NFA matches.
           return true;
         }
-        // We've exhausted the input and this configuration isn't in an accepting state, so this
-        // configuration of the NFA did not match. That's fine, we just continue onto other
-        // configurations.
-        continue;
+        // We've exhausted the input and this configuration isn't in an accepting state. However
+        // there may still be epsilon edges going out of this state. There's no harm in
+        // letting this play out.
       }
 
       // We haven't exhausted the input. Let's make choices and push a configuration per choice.
@@ -143,8 +179,7 @@ class NFA {
         // is -1 no match and this edge isn't matching.
         final matchSize = edge.value.getMatchSize(input, currentInputIndex);
         if (matchSize != -1) {
-          var newConfiguration =
-              NFAConfiguration(edge.endState, currentConfiguration.inputIndex + matchSize);
+          var newConfiguration = NFAConfiguration(edge.endState, currentInputIndex + matchSize);
 
           // We're doing a breadth-first search, so add to the front of the queue.
           configurations.addFirst(newConfiguration);
@@ -188,6 +223,10 @@ class NFAState {
 
   set outboundEdges(List<NFAEdge> value) {
     _outboundEdges = value;
+  }
+
+  void addOutputEdge(final NFAEdge edge) {
+    _outboundEdges.add(edge);
   }
 }
 

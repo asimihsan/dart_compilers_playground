@@ -59,6 +59,12 @@ class RegularExpressionValue {
         return 0;
 
       case RegularExpressionValueKind.LITERAL:
+        if (input.characters.isEmpty) {
+          return -1;
+        }
+        if (inputIndex >= input.characters.length) {
+          return -1;
+        }
         var charToMatch = input.characters.elementAt(inputIndex);
         if (literal == charToMatch) {
           return literal.length;
@@ -107,10 +113,25 @@ enum RegularExpressionKind { VALUE, CLOSURE, CONCATENATION, ALTERNATION }
 //
 // Parentheses are folded into the structure of the tree and have no explicit representation.
 //
+// TODO how do I escape from needing to use + as concatenation? a+ should be aa*.
+//
 // References
 //
 // [1] Engineering a Compiler 2nd Edition section 2.3 (Regular Expressions).
 class RegularExpression {
+  static final operandToPrecedence = {
+    '(': 0,
+    ')': 1,
+    '*': 2,
+    '+': 3,
+    '|': 4,
+  };
+  static final operandToApplyFunction = {
+    '*': applyClosureToOutput,
+    '+': applyConcatenationToOutput,
+    '|': applyAlternationToOutput,
+  };
+
   final RegularExpressionKind _kind;
   final RegularExpression _left;
   final RegularExpression _right;
@@ -165,26 +186,13 @@ class RegularExpression {
             var operand = operands.removeFirst();
             switch (operand) {
               case '*':
-                var value = output.removeFirst();
-                var newOutput = RegularExpression._Closure(value);
-                value.parent = newOutput;
-                output.addFirst(newOutput);
+                applyClosureToOutput(output);
                 break;
               case '|':
-                var right = output.removeFirst();
-                var left = output.removeFirst();
-                var newOutput = RegularExpression._Alternation(left, right);
-                left.parent = newOutput;
-                right.parent = newOutput;
-                output.addFirst(newOutput);
+                applyAlternationToOutput(output);
                 break;
               case '+':
-                var right = output.removeFirst();
-                var left = output.removeFirst();
-                var newOutput = RegularExpression._Concatenation(left, right);
-                left.parent = newOutput;
-                right.parent = newOutput;
-                output.addFirst(newOutput);
+                applyConcatenationToOutput(output);
                 break;
               case '(':
                 foundMatchingParen = true;
@@ -200,15 +208,26 @@ class RegularExpression {
           break;
 
         case '*':
-          operands.addFirst(character);
-          lookingAtValue = false;
-          lookingAtCloseParen = false;
-          break;
-
         case '|':
-          operands.addFirst(character);
+          final precedence = operandToPrecedence[character];
+          while (operands.isNotEmpty) {
+            final topOperand = operands.first;
+            final topOperandPrecedence = operandToPrecedence[topOperand];
+            final topOperandApplyFunction = operandToApplyFunction[topOperand];
+            if (topOperandPrecedence > precedence || topOperandApplyFunction == null) {
+              break;
+            }
+            operands.removeFirst();
+            topOperandApplyFunction(output);
+          }
           lookingAtValue = false;
           lookingAtCloseParen = false;
+
+          if (character == '*') {
+            applyClosureToOutput(output);
+          } else {
+            operands.addFirst(character);
+          }
           break;
 
         default:
@@ -227,29 +246,54 @@ class RegularExpression {
       var operand = operands.removeFirst();
       switch (operand) {
         case '*':
-          var value = output.removeFirst();
-          var newOutput = RegularExpression._Closure(value);
-          value.parent = newOutput;
-          output.addFirst(newOutput);
+          applyClosureToOutput(output);
           break;
         case '+':
-          var right = output.removeFirst();
-          var left = output.removeFirst();
-          var newOutput = RegularExpression._Concatenation(left, right);
-          left.parent = newOutput;
-          right.parent = newOutput;
-          output.addFirst(newOutput);
+          applyConcatenationToOutput(output);
+          break;
+        case '|':
+          applyAlternationToOutput(output);
           break;
         default:
           throw StateError('unexpected operand $operand during final stage');
       }
     }
 
+    while (output.length > 1) {
+      applyConcatenationToOutput(output);
+    }
+
     if (output.length != 1) {
-      throw StateError('unexpected output length $output.length at very end');
+      var actualLength = output.length;
+      throw StateError('unexpected output length $actualLength at very end');
     }
 
     return output.removeFirst();
+  }
+
+  static void applyClosureToOutput(final Queue<RegularExpression> output) {
+    var value = output.removeFirst();
+    var newOutput = RegularExpression._Closure(value);
+    value.parent = newOutput;
+    output.addFirst(newOutput);
+  }
+
+  static void applyConcatenationToOutput(final Queue<RegularExpression> output) {
+    var right = output.removeFirst();
+    var left = output.removeFirst();
+    var newOutput = RegularExpression._Concatenation(left, right);
+    left.parent = newOutput;
+    right.parent = newOutput;
+    output.addFirst(newOutput);
+  }
+
+  static void applyAlternationToOutput(final Queue<RegularExpression> output) {
+    var right = output.removeFirst();
+    var left = output.removeFirst();
+    var newOutput = RegularExpression._Alternation(left, right);
+    left.parent = newOutput;
+    right.parent = newOutput;
+    output.addFirst(newOutput);
   }
 
   RegularExpressionKind get kind => _kind;
